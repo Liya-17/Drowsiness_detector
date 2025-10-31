@@ -1,0 +1,72 @@
+# Advanced Drowsiness Detection System Configuration
+
+# Camera Settings
+camera:
+  id: 0
+  width: 1280
+  height: 720
+  fps: 30
+
+# Detection Thresholds (will be adaptively adjusted)
+thresholds:
+  ear_baseline: 0.18  # Eye Aspect Ratio (very low to avoid flagging normal blinks)
+  mar_baseline: 0.70  # Mouth Aspect Ratio (high to only catch real yawns)
+  perclos_warning: 0.30  # 30% eye closure (only warn if eyes closed 30% of time)
+  perclos_critical: 0.50  # 50% eye closure (critical if eyes closed half the time)
+  microsleep_duration: 25  # frames (~0.83 seconds at 30fps)
+
+# Alert Levels (increased to reduce false alarms)
+alerts:
+  level_1_fatigue: 40  # Early warning (was 30)
+  level_2_fatigue: 60  # Moderate fatigue (was 50)
+  level_3_fatigue: 75  # High fatigue (was 70)
+  level_4_fatigue: 90  # Critical drowsiness (was 85)
+
+  # Alert cooldown periods (seconds)
+  cooldown_level_1: 10
+  cooldown_level_2: 5
+  cooldown_level_3: 3
+  cooldown_level_4: 1
+
+# Audio Settings
+audio:
+  enabled: true
+  volume: 0.8
+  warning_frequency: 800
+  critical_frequency: 1200
+
+# Calibration Settings
+calibration:
+  enabled: true
+  duration: 30  # seconds
+  require_on_startup: true
+
+# Data Logging
+logging:
+  enabled: true
+  save_sessions: true
+  save_directory: "./sessions"
+  export_format: ["json", "csv"]
+
+# Advanced Features
+features:
+  pupil_tracking: true
+  gaze_analysis: true
+  microsleep_detection: true
+  facial_expression_analysis: true
+  temporal_pattern_analysis: true
+  predictive_alerts: true
+  adaptive_thresholds: true
+
+# Performance
+performance:
+  max_fps: 30
+  processing_scale: 1.0
+  enable_gpu: false
+
+# Web Dashboard
+dashboard:
+  port: 5000
+  host: "0.0.0.0"
+  realtime_charts: true
+  show_debug_info: true

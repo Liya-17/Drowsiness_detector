@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Drowsiness Detection System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🚗 Advanced Drowsiness Detection System</h1>
+            <p class="subtitle">Real-time fatigue monitoring with AI-powered analysis</p>
+        </header>
+
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <div class="controls">
+                <button id="startBtn" class="btn btn-success">Start Detection</button>
+                <button id="stopBtn" class="btn btn-danger" disabled>Stop Detection</button>
+                <button id="calibrateBtn" class="btn btn-primary">Calibrate</button>
+            </div>
+            <div class="status-indicator">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Idle</span>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Video Feed -->
+            <div class="card video-card">
+                <div class="card-header">
+                    <h2>Live Video Feed</h2>
+                    <span class="fps-counter" id="fpsCounter">0 FPS</span>
+                </div>
+                <div class="video-container">
+                    <img id="videoFeed" src="" alt="Video feed will appear here">
+                    <div class="video-overlay" id="videoOverlay">
+                        <p>Click "Start Detection" to begin monitoring</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Panel -->
+            <div class="card metrics-card">
+                <div class="card-header">
+                    <h2>Real-time Metrics</h2>
+                </div>
+                <div class="metrics-grid">
+                    <!-- Fatigue Score -->
+                    <div class="metric-item">
+                        <div class="metric-label">Fatigue Score</div>
+                        <div class="metric-value" id="fatigueScore">0%</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="fatigueFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Attention Score -->
+                    <div class="metric-item">
+                        <div class="metric-label">Attention Score</div>
+                        <div class="metric-value" id="attentionScore">100%</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill attention" id="attentionFill" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Alert Level -->
+                    <div class="metric-item">
+                        <div class="metric-label">Alert Level</div>
+                        <div class="alert-badge" id="alertBadge">NORMAL</div>
+                    </div>
+
+                    <!-- PERCLOS -->
+                    <div class="metric-item">
+                        <div class="metric-label">PERCLOS</div>
+                        <div class="metric-value" id="perclos">0%</div>
+                    </div>
+
+                    <!-- EAR -->
+                    <div class="metric-item">
+                        <div class="metric-label">Eye Aspect Ratio</div>
+                        <div class="metric-value" id="ear">0.000</div>
+                    </div>
+
+                    <!-- MAR -->
+                    <div class="metric-item">
+                        <div class="metric-label">Mouth Aspect Ratio</div>
+                        <div class="metric-value" id="mar">0.000</div>
+                    </div>
+
+                    <!-- Blinks -->
+                    <div class="metric-item">
+                        <div class="metric-label">Blinks</div>
+                        <div class="metric-value">
+                            <span id="blinkCount">0</span>
+                            <small>(<span id="blinkRate">0</span>/min)</small>
+                        </div>
+                    </div>
+
+                    <!-- Yawns -->
+                    <div class="metric-item">
+                        <div class="metric-label">Yawns</div>
+                        <div class="metric-value">
+                            <span id="yawnCount">0</span>
+                            <small>(<span id="yawnRate">0</span>/min)</small>
+                        </div>
+                    </div>
+
+                    <!-- Microsleeps -->
+                    <div class="metric-item">
+                        <div class="metric-label">Microsleep Episodes</div>
+                        <div class="metric-value" id="microsleepCount">0</div>
+                    </div>
+
+                    <!-- Session Time -->
+                    <div class="metric-item">
+                        <div class="metric-label">Session Duration</div>
+                        <div class="metric-value" id="sessionTime">00:00:00</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-grid">
+            <!-- Fatigue Trend -->
+            <div class="card chart-card">
+                <div class="card-header">
+                    <h2>Fatigue Trend (Last 30s)</h2>
+                </div>
+                <div class="chart-container">
+                    <canvas id="fatigueChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Multi-Metric Chart -->
+            <div class="card chart-card">
+                <div class="card-header">
+                    <h2>EAR & PERCLOS Trend</h2>
+                </div>
+                <div class="chart-container">
+                    <canvas id="metricsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Panel -->
+        <div class="card stats-card">
+            <div class="card-header">
+                <h2>Session Statistics</h2>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Average Fatigue</div>
+                    <div class="stat-value" id="avgFatigue">0%</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Peak Fatigue</div>
+                    <div class="stat-value" id="maxFatigue">0%</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Average PERCLOS</div>
+                    <div class="stat-value" id="avgPerclos">0%</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Total Alerts</div>
+                    <div class="stat-value" id="totalAlerts">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calibration Modal -->
+        <div id="calibrationModal" class="modal">
+            <div class="modal-content">
+                <h2>System Calibration</h2>
+                <p id="calibrationMessage">Please sit naturally and look at the camera. The system will establish your baseline metrics.</p>
+                <div class="progress-bar large">
+                    <div class="progress-fill" id="calibrationProgress" style="width: 0%"></div>
+                </div>
+                <div class="calibration-percent" id="calibrationPercent">0%</div>
+                <button id="cancelCalibrationBtn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Alert Toast -->
+        <div id="alertToast" class="alert-toast"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
