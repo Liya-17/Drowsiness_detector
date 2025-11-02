@@ -26,6 +26,9 @@ class AdvancedDrowsinessDetector:
     LEFT_IRIS_INDICES = [468, 469, 470, 471, 472]
     RIGHT_IRIS_INDICES = [473, 474, 475, 476, 477]
     MOUTH_INDICES = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95]
+    # Separate upper and lower lip for better visualization
+    UPPER_LIP_INDICES = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291]
+    LOWER_LIP_INDICES = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291]
     NOSE_TIP = 1
     CHIN = 152
     LEFT_EYE_LEFT = 33
@@ -79,11 +82,14 @@ class AdvancedDrowsinessDetector:
         # State tracking
         self.consecutive_closed_frames = 0
         self.consecutive_drowsy_frames = 0
+        self.consecutive_mouth_open_frames = 0
+        self.mouth_open_start_mar = 0
         self.microsleep_count = 0
         self.blink_count = 0
         self.yawn_count = 0
         self.total_frames = 0
         self.start_time = time.time()
+        self.last_yawn_detected = False
 
         # Alert state
         self.alert_level = 0
@@ -139,6 +145,104 @@ class AdvancedDrowsinessDetector:
 
         mar = sum(vertical_distances) / (len(vertical_distances) * horizontal_dist)
         return mar
+
+    def calculate_mouth_metrics(self, landmarks):
+        """
+        Calculate detailed mouth metrics for yawn detection
+        Returns: (mar, vertical_opening, mouth_area, aspect_ratio)
+        """
+        # Get upper and lower lip landmarks
+        upper_lip = landmarks[self.UPPER_LIP_INDICES]
+        lower_lip = landmarks[self.LOWER_LIP_INDICES]
+
+        # Calculate vertical opening (center of mouth)
+        # Use points from center of upper and lower lips
+        upper_center_idx = len(upper_lip) // 2
+        lower_center_idx = len(lower_lip) // 2
+        vertical_opening = dist.euclidean(upper_lip[upper_center_idx], lower_lip[lower_center_idx])
+
+        # Calculate horizontal width
+        horizontal_width = dist.euclidean(
+            landmarks[self.LEFT_MOUTH_CORNER],
+            landmarks[self.RIGHT_MOUTH_CORNER]
+        )
+
+        # Calculate mouth aspect ratio (vertical/horizontal)
+        mouth_aspect = vertical_opening / horizontal_width if horizontal_width > 0 else 0
+
+        # Calculate approximate mouth area using the shoelace formula
+        # Combine upper and lower lip points to form a closed contour
+        mouth_points = np.vstack([upper_lip[:, :2], lower_lip[::-1, :2]])
+        mouth_area = 0.5 * abs(sum(
+            mouth_points[i, 0] * mouth_points[i + 1, 1] - mouth_points[i + 1, 0] * mouth_points[i, 1]
+            for i in range(len(mouth_points) - 1)
+        ))
+
+        # Calculate standard MAR
+        mouth = landmarks[self.MOUTH_INDICES]
+        mar = self.calculate_mar(mouth)
+
+        return mar, vertical_opening, mouth_area, mouth_aspect
+
+    def detect_yawn(self, mar, vertical_opening, mouth_area, mouth_aspect):
+        """
+        Improved yawn detection that differentiates from talking
+
+        Yawn characteristics:
+        - Large vertical mouth opening
+        - Sustained duration (1-2 seconds)
+        - Gradual increase and decrease in mouth opening
+        - Higher vertical-to-horizontal ratio
+        - Larger mouth area
+
+        Talking characteristics:
+        - Rapid mouth movements
+        - Smaller vertical opening
+        - Frequent changes in mouth shape
+        - Lower vertical-to-horizontal ratio
+        """
+        # Yawn thresholds
+        yawn_mar_threshold = 0.6  # High MAR for yawns
+        yawn_vertical_threshold = 40  # Pixels (will vary by face size)
+        yawn_aspect_threshold = 0.5  # Vertical opening is at least 50% of horizontal width
+        yawn_min_duration = 20  # frames (~0.67 seconds at 30fps)
+        yawn_max_duration = 90  # frames (~3 seconds at 30fps)
+
+        # Check if mouth is significantly open
+        mouth_significantly_open = (
+            mar > yawn_mar_threshold and
+            mouth_aspect > yawn_aspect_threshold and
+            vertical_opening > yawn_vertical_threshold
+        )
+
+        if mouth_significantly_open:
+            if self.consecutive_mouth_open_frames == 0:
+                # Starting a potential yawn, record initial MAR
+                self.mouth_open_start_mar = mar
+
+            self.consecutive_mouth_open_frames += 1
+
+            # Check if this is a sustained yawn (not rapid talking)
+            if yawn_min_duration <= self.consecutive_mouth_open_frames <= yawn_max_duration:
+                # This is likely a yawn - sustained opening
+                if not self.last_yawn_detected:
+                    self.last_yawn_detected = True
+                    return True  # New yawn detected
+        else:
+            # Mouth closed or only slightly open
+            if self.consecutive_mouth_open_frames > 0:
+                # Mouth just closed
+                # If it was open for too short (talking) or too long, it's not a yawn
+                if self.consecutive_mouth_open_frames < yawn_min_duration:
+                    # Too short - likely talking or other movement
+                    pass
+
+            # Reset counters
+            self.consecutive_mouth_open_frames = 0
+            self.mouth_open_start_mar = 0
+            self.last_yawn_detected = False
+
+        return False
 
     def calculate_pupil_size(self, iris_landmarks):
         """Calculate relative pupil size"""
@@ -428,7 +532,8 @@ class AdvancedDrowsinessDetector:
         ear_right = self.calculate_ear(right_eye)
         ear = (ear_left + ear_right) / 2.0
 
-        mar = self.calculate_mar(mouth)
+        # Calculate detailed mouth metrics for better yawn detection
+        mar, vertical_opening, mouth_area, mouth_aspect = self.calculate_mouth_metrics(landmarks)
 
         # Update histories
         self.ear_history.append(ear)
@@ -448,15 +553,11 @@ class AdvancedDrowsinessDetector:
                     self.blink_timestamps.append(time.time())
             self.consecutive_closed_frames = 0
 
-        # Yawn detection
-        yawning = mar > self.mar_threshold
+        # Improved yawn detection (differentiates from talking)
+        yawning = self.detect_yawn(mar, vertical_opening, mouth_area, mouth_aspect)
         if yawning:
-            self.consecutive_drowsy_frames += 1
-            if self.consecutive_drowsy_frames == 20:  # Sustained yawn
-                self.yawn_count += 1
-                self.yawn_timestamps.append(time.time())
-        else:
-            self.consecutive_drowsy_frames = 0
+            self.yawn_count += 1
+            self.yawn_timestamps.append(time.time())
 
         # Microsleep detection
         microsleep = self.detect_microsleep()
@@ -486,6 +587,8 @@ class AdvancedDrowsinessDetector:
             'attention_score': round(100 - fatigue_score, 2),
             'ear': round(ear, 3),
             'mar': round(mar, 3),
+            'mouth_aspect': round(mouth_aspect, 3),
+            'mouth_open_frames': int(self.consecutive_mouth_open_frames),
             'perclos': round(perclos * 100, 2),
             'blink_rate': int(blink_rate),
             'yawn_rate': int(yawn_rate),
@@ -521,9 +624,31 @@ class AdvancedDrowsinessDetector:
             x, y = int(landmarks[idx][0]), int(landmarks[idx][1])
             cv2.circle(annotated, (x, y), 2, (0, 255, 0), -1)
 
-        for idx in self.MOUTH_INDICES:
+        # Draw upper lip contour (change color if yawning)
+        mouth_color = (0, 0, 255) if metrics['yawning'] else (0, 255, 255)  # Red if yawning, cyan otherwise
+        upper_lip_points = np.array([[int(landmarks[idx][0]), int(landmarks[idx][1])]
+                                     for idx in self.UPPER_LIP_INDICES], dtype=np.int32)
+        cv2.polylines(annotated, [upper_lip_points], False, mouth_color, 2)
+
+        # Draw lower lip contour (change color if yawning)
+        lower_lip_points = np.array([[int(landmarks[idx][0]), int(landmarks[idx][1])]
+                                     for idx in self.LOWER_LIP_INDICES], dtype=np.int32)
+        cv2.polylines(annotated, [lower_lip_points], False, mouth_color, 2)
+
+        # Draw mouth corner points for clarity
+        for idx in [self.LEFT_MOUTH_CORNER, self.RIGHT_MOUTH_CORNER]:
             x, y = int(landmarks[idx][0]), int(landmarks[idx][1])
-            cv2.circle(annotated, (x, y), 2, (0, 255, 255), -1)
+            cv2.circle(annotated, (x, y), 3, (255, 255, 0), -1)
+
+        # Draw yawn indicator if yawning
+        if metrics['yawning']:
+            yawn_text = "YAWNING!"
+            text_size = cv2.getTextSize(yawn_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+            # Position near mouth
+            mouth_center_x = int((landmarks[self.LEFT_MOUTH_CORNER][0] + landmarks[self.RIGHT_MOUTH_CORNER][0]) / 2)
+            mouth_bottom_y = int(max(landmarks[idx][1] for idx in self.LOWER_LIP_INDICES))
+            text_pos = (mouth_center_x - text_size[0] // 2, mouth_bottom_y + 30)
+            cv2.putText(annotated, yawn_text, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
 
         # Alert color
         alert_colors = [
