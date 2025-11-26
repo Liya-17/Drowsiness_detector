@@ -1,6 +1,4 @@
-python
-# // filepath: requirements.render.txt
-# Minimal, prebuilt-wheel deps to avoid OOM on Render (remove heavy compiled packages)
+# Minimal, prebuilt-wheel dependencies for Render (no heavy compiled ML packages)
 flask>=3.0.0
 gunicorn==21.2.0
 opencv-python>=4.8.0
@@ -8,6 +6,7 @@ numpy>=1.24.0
 imutils>=0.5.4
 python-dotenv>=1.0.0
 pyyaml>=6.0
+
 # SocketIO dependencies (required by app.py)
 flask-socketio>=5.3.0
 python-socketio>=5.10.0
