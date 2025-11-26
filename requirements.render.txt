@@ -1,3 +1,4 @@
+...existing code...
 # Minimal, prebuilt-wheel dependencies for Render (no heavy compiled ML packages)
 flask>=3.0.0
 flask-cors>=4.0.0
@@ -12,3 +13,6 @@ pyyaml>=6.0
 flask-socketio>=5.3.0
 python-socketio>=5.10.0
 eventlet>=0.33.0
+
+# Add MediaPipe (requires Python <= 3.12; pin runtime to 3.11)
+mediapipe>=0.10.0
