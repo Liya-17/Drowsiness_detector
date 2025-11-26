@@ -1,5 +1,5 @@
 python
-// filepath: requirements.render.txt
+# // filepath: requirements.render.txt
 # Minimal, prebuilt-wheel deps to avoid OOM on Render (remove heavy compiled packages)
 flask>=3.0.0
 gunicorn==21.2.0
